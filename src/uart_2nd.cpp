@@ -3,30 +3,40 @@
 #include <std_msgs/String.h>
 #include <sensor_msgs/Imu.h>
 #include <geometry_msgs/Twist.h>
+#include <tf/transform_broadcaster.h>
+#include <nav_msgs/Odometry.h>
 #include <vector>
 #include <math.h>
 
-#define rBUFFERSIZE 30
 #define sBUFFERSIZE 6
-unsigned char r_buffer[rBUFFERSIZE];
 unsigned char s_buffer[sBUFFERSIZE];
-unsigned char ret=0;
+std::vector<uint8_t> buf;
+std::vector<uint8_t> r_buf;
 
 serial::Serial ser;
 ros::Publisher uart_pub;
+ros::Publisher odom_pub;
 ros::Subscriber uart_sub;
 
-void data_analysis(unsigned char *buffer){
-    std::vector<uint8_t> csum;
+int count = 0;
+
+ros::Time current_time, last_time;
+
+float x=0,y=0,th=0;
+
+
+void data_analysis(std::vector<uint8_t> csum){
+
     float Acc_x=0,Acc_y=0,Acc_z=0,GX=0,GY=0,GZ=0;
+    float Vx=0,Vy=0,W=0;
+    float R=0.203,a=0.26,b=0.15;
     float WH1=0,WH2=0,WH3=0,WH4=0;
+
     sensor_msgs::Imu rec;
-    for(int i=0; i<rBUFFERSIZE; i++){
-        if(buffer[i]==0xff && buffer[i+17]==0xfe){
-            csum.clear();
-            for(int j=0; j<18; j++){
-                csum.push_back(buffer[i+j]);
-            }
+    nav_msgs::Odometry odom;
+    static tf::TransformBroadcaster odom_broadcaster;
+
+
             if(csum[1]*256+csum[2] > 32768){
                 Acc_x = (float)(csum[1]*256+csum[2]-65536);
             }else{
@@ -42,7 +52,7 @@ void data_analysis(unsigned char *buffer){
             }else{
                 Acc_z = (float)(csum[5]*256+csum[6]);
             }
-	    if(csum[7]*256+csum[8] > 32768){
+            if(csum[7]*256+csum[8] > 32768){
                 GX = (float)(csum[7]*256+csum[8]-65536);
             }else{
                 GX = (float)(csum[7]*256+csum[8]);
@@ -57,11 +67,33 @@ void data_analysis(unsigned char *buffer){
             }else{
                 GZ = (float)(csum[11]*256+csum[12]);
             }
+            if( csum[13]*256+csum[14] > 32768 ){
+                WH1= (float)(csum[13]*256+csum[14]-65536)/600;
+            }else{
+                WH1= (float)(csum[13]*256+csum[14])/600;
+            }
+            if( csum[15]*256+csum[16] > 32768 ){
+                WH2= (float)(csum[15]*256+csum[16]-65536)/600;
+            }else{
+                WH2= (float)(csum[15]*256+csum[16])/600;
+            }
+            if( csum[17]*256+csum[18] > 32768 ){
+                WH3= (float)(csum[17]*256+csum[18]-65536)/600;
+            }else{
+                WH3= (float)(csum[17]*256+csum[18])/600;
+            }
+            if( csum[19]*256+csum[20] > 32768 ){
+                WH4= (float)(csum[19]*256+csum[20]-65536)/600;
+            }else{
+                WH4= (float)(csum[19]*256+csum[20])/600;
+            }
 
-            WH1=csum[13]/10;
-            WH2=csum[14]/10;
-            WH3=csum[15]/10;
-            WH4=csum[16]/10;
+//            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
+
+
+
+            ////////////////// IMU //////////////////
+
             rec.angular_velocity.x = GX*3.14159/1800;
             rec.angular_velocity.y = GY*3.14159/1800;
             rec.angular_velocity.z = GZ*3.14159/1800;
@@ -74,18 +106,74 @@ void data_analysis(unsigned char *buffer){
             float ang_cov[9] = {1e5, 0, 0,
                                 0, 1e5, 0,
                                 0, 0, 1e-5};
-            float acc_cov[9] = {1e-5, 0, 0,
-                                0, 1e-5, 0,
-                                0, 0, 1e-5};
+//            float acc_cov[9] = {1e-5, 0, 0,
+//                                0, 1e-5, 0,
+//                                0, 0, 1e-5};
             rec.orientation_covariance[0] = -1;
+            rec.linear_acceleration_covariance[0] = -1;
             for(int h=0; h<9; h++){
                 rec.angular_velocity_covariance[h] = ang_cov[h];
-                rec.linear_acceleration_covariance[h] = acc_cov[h];
+//                rec.linear_acceleration_covariance[h] = acc_cov[h];
             }
+
+            //////////// Odom //////////////
+
+            Vx = 0.25*R*(WH1+WH2+WH3+WH4)*0.95;
+            Vy = 0.25*R*(WH1-WH2-WH3+WH4)*0.95;
+            W = 0.25*R*(WH1-WH2+WH3-WH4)/(a+b)*0.95;
+
+            current_time = ros::Time::now();
+
+            double dt = (current_time - last_time).toSec();;
+            double delta_x = (Vx * cos(th) - Vy * sin(th)) * dt;
+            double delta_y = (Vx * sin(th) + Vy * cos(th)) * dt;
+            double delta_th = W * dt;
+
+
+
+
+            x += delta_x;
+            y += delta_y;
+            th += delta_th;
+
+            geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th);
+
+            geometry_msgs::TransformStamped odom_trans;
+            odom_trans.header.stamp = current_time;
+            odom_trans.header.frame_id = "odom";
+            odom_trans.child_frame_id = "base_footprint";
+
+            odom_trans.transform.translation.x = x;
+            odom_trans.transform.translation.y = y;
+            odom_trans.transform.translation.z = 0.0;
+            odom_trans.transform.rotation = odom_quat;
+
+            odom_broadcaster.sendTransform(odom_trans);
+
+            odom.header.stamp = current_time;
+            odom.header.frame_id = "odom";
+
+            //set the position
+            odom.pose.pose.position.x = x;
+            odom.pose.pose.position.y = y;
+            odom.pose.pose.position.z = 0.0;
+            odom.pose.pose.orientation = odom_quat;
+
+            //set the velocity
+            odom.child_frame_id = "base_footprint";
+            odom.twist.twist.linear.x = Vx;
+            odom.twist.twist.linear.y = Vy;
+            odom.twist.twist.angular.z = W;
+
+
             uart_pub.publish(rec);
-            i=i+18;
-        }
-    }
+            odom_pub.publish(odom);
+            count = count + 1;
+//            std::cout << "dt: " << dt << "  dx: " << delta_x << "  Vx: " << Vx << std::endl;
+//            std::cout << "round:" << count << std::endl;
+            last_time = current_time;
+        
+  
 }
 
 void data_pack(const geometry_msgs::Twist cmd_vel){
@@ -110,17 +198,20 @@ void data_pack(const geometry_msgs::Twist cmd_vel){
 }
 
 void cmd_vel_CB(const geometry_msgs::Twist cmd_vel){
-    ROS_INFO("linear velocity: x-[%f],y-[%f]",cmd_vel.linear.x,cmd_vel.linear.y);
-    ROS_INFO("angular velocity: yaw-[%f]",cmd_vel.angular.z);
-    std::cout << "Twist Received" << std::endl;
+//    ROS_INFO("linear velocity: x-[%f],y-[%f]",cmd_vel.linear.x,cmd_vel.linear.y);
+//    ROS_INFO("angular velocity: yaw-[%f]",cmd_vel.angular.z);
+//    std::cout << "Twist Received" << std::endl;
     data_pack(cmd_vel);
 }
 
 
 int main(int argc, char **argv){
     ros::init(argc, argv, "uart_2nd");
+
     ros::NodeHandle nh;
+    tf::TransformBroadcaster odom_broadcaster;
     uart_pub = nh.advertise<sensor_msgs::Imu>("imu", 1000);
+    odom_pub = nh.advertise<nav_msgs::Odometry>("odom",1000);
     uart_sub = nh.subscribe<geometry_msgs::Twist>("/cmd_vel", 1000,cmd_vel_CB);
     try
         {
@@ -141,14 +232,31 @@ int main(int argc, char **argv){
         }else{
             return -1;
         }
-
+    ros::AsyncSpinner spinner(2);
+    spinner.start();
     ros::Rate loop_rate(10);
     while (ros::ok()){
-        ros::spinOnce();
         if(ser.available()){
-           ROS_INFO_STREAM("Reading from serial port");
-            ser.read(r_buffer,rBUFFERSIZE);
-            data_analysis(r_buffer);
+           std::string str = ser.read(ser.available());
+           for(int i = 0; i < str.length(); i++)
+           {
+             buf.push_back(str[i]);
+//             printf("%x, ", *buf.rbegin());
+             if(*buf.rbegin() == 0xFE ){
+                if(buf.size() == 22){
+                    if(*(buf.rbegin() + 21) == 0xFF){
+                       for(int l=0; l<buf.size(); l++){
+                          r_buf.push_back(buf[l]);
+                       }
+                       data_analysis(r_buf);
+                       r_buf.clear();
+
+                    }
+                }
+//               std::cout << std::endl;
+               buf.clear();
+             }
+           }
         }
     }
 }

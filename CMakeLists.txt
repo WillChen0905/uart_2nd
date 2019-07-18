@@ -6,6 +6,8 @@ find_package(catkin REQUIRED COMPONENTS
     rospy
     serial
     std_msgs
+    nav_msgs
+    tf
 )
 
 catkin_package()
