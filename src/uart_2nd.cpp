@@ -68,24 +68,24 @@ void data_analysis(std::vector<uint8_t> csum){
                 GZ = (float)(csum[11]*256+csum[12]);
             }
             if( csum[13]*256+csum[14] > 32768 ){
-                WH1= (float)(csum[13]*256+csum[14]-65536)/600;
+                WH1= (float)(csum[13]*256+csum[14]-65536)/3000;
             }else{
-                WH1= (float)(csum[13]*256+csum[14])/600;
+                WH1= (float)(csum[13]*256+csum[14])/3000;
             }
             if( csum[15]*256+csum[16] > 32768 ){
-                WH2= (float)(csum[15]*256+csum[16]-65536)/600;
+                WH2= (float)(csum[15]*256+csum[16]-65536)/3000;
             }else{
-                WH2= (float)(csum[15]*256+csum[16])/600;
+                WH2= (float)(csum[15]*256+csum[16])/3000;
             }
             if( csum[17]*256+csum[18] > 32768 ){
-                WH3= (float)(csum[17]*256+csum[18]-65536)/600;
+                WH3= (float)(csum[17]*256+csum[18]-65536)/3000;
             }else{
-                WH3= (float)(csum[17]*256+csum[18])/600;
+                WH3= (float)(csum[17]*256+csum[18])/3000;
             }
             if( csum[19]*256+csum[20] > 32768 ){
-                WH4= (float)(csum[19]*256+csum[20]-65536)/600;
+                WH4= (float)(csum[19]*256+csum[20]-65536)/3000;
             }else{
-                WH4= (float)(csum[19]*256+csum[20])/600;
+                WH4= (float)(csum[19]*256+csum[20])/3000;
             }
 
 //            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
@@ -168,7 +168,7 @@ void data_analysis(std::vector<uint8_t> csum){
 
             uart_pub.publish(rec);
             odom_pub.publish(odom);
-            count = count + 1;
+//            count = count + 1;
 //            std::cout << "dt: " << dt << "  dx: " << delta_x << "  Vx: " << Vx << std::endl;
 //            std::cout << "round:" << count << std::endl;
             last_time = current_time;
@@ -216,7 +216,7 @@ int main(int argc, char **argv){
     try
         {
             ser.setPort("/dev/ttyACM0");
-            ser.setBaudrate(57600);
+            ser.setBaudrate(115200);
             serial::Timeout to = serial::Timeout::simpleTimeout(1000);
             ser.setTimeout(to);
             ser.open();
@@ -241,10 +241,10 @@ int main(int argc, char **argv){
            for(int i = 0; i < str.length(); i++)
            {
              buf.push_back(str[i]);
-//             printf("%x, ", *buf.rbegin());
-             if(*buf.rbegin() == 0xFE ){
-                if(buf.size() == 22){
-                    if(*(buf.rbegin() + 21) == 0xFF){
+             printf("%x, ", *buf.rbegin());
+             if(*buf.rbegin() == 0xaa && *(buf.rbegin()+1) == 0xaa){
+                if(buf.size() == 23){
+                    if(*(buf.rbegin() + 22) == 0xbb){
                        for(int l=0; l<buf.size(); l++){
                           r_buf.push_back(buf[l]);
                        }
@@ -253,7 +253,7 @@ int main(int argc, char **argv){
 
                     }
                 }
-//               std::cout << std::endl;
+               std::cout << std::endl;
                buf.clear();
              }
            }
