@@ -8,7 +8,7 @@
 #include <vector>
 #include <math.h>
 
-#define sBUFFERSIZE 6
+#define sBUFFERSIZE 7
 unsigned char s_buffer[sBUFFERSIZE];
 std::vector<uint8_t> buf;
 std::vector<uint8_t> r_buf;
@@ -29,7 +29,7 @@ void data_analysis(std::vector<uint8_t> csum){
 
     float Acc_x=0,Acc_y=0,Acc_z=0,GX=0,GY=0,GZ=0;
     float Vx=0,Vy=0,W=0;
-    float R=0.203,a=0.26,b=0.15;
+    float R=0.232,a=0.26,b=0.15;
     float WH1=0,WH2=0,WH3=0,WH4=0;
 
     sensor_msgs::Imu rec;
@@ -68,27 +68,27 @@ void data_analysis(std::vector<uint8_t> csum){
                 GZ = (float)(csum[11]*256+csum[12]);
             }
             if( csum[13]*256+csum[14] > 32768 ){
-                WH1= (float)(csum[13]*256+csum[14]-65536)/3000;
+                WH1= (float)(csum[13]*256+csum[14]-65536)*6.28*5/8600;
             }else{
-                WH1= (float)(csum[13]*256+csum[14])/3000;
-            }
+                WH1= (float)(csum[13]*256+csum[14])*6.28*5/8600;
+           }
             if( csum[15]*256+csum[16] > 32768 ){
-                WH2= (float)(csum[15]*256+csum[16]-65536)/3000;
+                WH2= (float)(csum[15]*256+csum[16]-65536)*6.28*5/8600;
             }else{
-                WH2= (float)(csum[15]*256+csum[16])/3000;
+                WH2= (float)(csum[15]*256+csum[16])*6.28*5/8600;
             }
             if( csum[17]*256+csum[18] > 32768 ){
-                WH3= (float)(csum[17]*256+csum[18]-65536)/3000;
+                WH3= (float)(csum[17]*256+csum[18]-65536)*6.28*5/8600;
             }else{
-                WH3= (float)(csum[17]*256+csum[18])/3000;
+                WH3= (float)(csum[17]*256+csum[18])*6.28*5/8600;
             }
             if( csum[19]*256+csum[20] > 32768 ){
-                WH4= (float)(csum[19]*256+csum[20]-65536)/3000;
+                WH4= (float)(csum[19]*256+csum[20]-65536)*6.28*5/8600;
             }else{
-                WH4= (float)(csum[19]*256+csum[20])/3000;
+                WH4= (float)(csum[19]*256+csum[20])*6.28*5/8600;
             }
 
-//            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
+            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
 
 
 
@@ -118,9 +118,9 @@ void data_analysis(std::vector<uint8_t> csum){
 
             //////////// Odom //////////////
 
-            Vx = 0.25*R*(WH1+WH2+WH3+WH4)*0.95;
-            Vy = 0.25*R*(WH1-WH2-WH3+WH4)*0.95;
-            W = 0.25*R*(WH1-WH2+WH3-WH4)/(a+b)*0.95;
+            Vx = 0.25*R*(WH1+WH2+WH3+WH4);
+            Vy = 0.25*R*(WH1-WH2-WH3+WH4);
+            W = 0.25*R*(WH1-WH2+WH3-WH4)/(a+b);
 
             current_time = ros::Time::now();
 
@@ -148,7 +148,7 @@ void data_analysis(std::vector<uint8_t> csum){
             odom_trans.transform.translation.z = 0.0;
             odom_trans.transform.rotation = odom_quat;
 
-            odom_broadcaster.sendTransform(odom_trans);
+//            odom_broadcaster.sendTransform(odom_trans);
 
             odom.header.stamp = current_time;
             odom.header.frame_id = "odom";
@@ -193,6 +193,7 @@ void data_pack(const geometry_msgs::Twist cmd_vel){
         s_buffer[3] = fabs(Ang_v);
         s_buffer[4] = Ox+Oy+Oz;
         s_buffer[5] = 0xfe;
+        s_buffer[6] = 0xfe;
         ser.write(s_buffer,sBUFFERSIZE);
     }
 }
@@ -215,7 +216,7 @@ int main(int argc, char **argv){
     uart_sub = nh.subscribe<geometry_msgs::Twist>("/cmd_vel", 1000,cmd_vel_CB);
     try
         {
-            ser.setPort("/dev/ttyACM0");
+            ser.setPort("/dev/arduino");
             ser.setBaudrate(115200);
             serial::Timeout to = serial::Timeout::simpleTimeout(1000);
             ser.setTimeout(to);
@@ -229,20 +230,22 @@ int main(int argc, char **argv){
 
         if(ser.isOpen()){
             ROS_INFO_STREAM("Serial Port initialized");
+
         }else{
             return -1;
         }
     ros::AsyncSpinner spinner(2);
     spinner.start();
     ros::Rate loop_rate(10);
+//    ros::Duration(5).sleep();
     while (ros::ok()){
         if(ser.available()){
            std::string str = ser.read(ser.available());
            for(int i = 0; i < str.length(); i++)
            {
              buf.push_back(str[i]);
-             printf("%x, ", *buf.rbegin());
-             if(*buf.rbegin() == 0xaa && *(buf.rbegin()+1) == 0xaa){
+//             printf("%x, ", *buf.rbegin());
+             if(*buf.rbegin() == 0x58 && *(buf.rbegin()+1) == 0x55){
                 if(buf.size() == 23){
                     if(*(buf.rbegin() + 22) == 0xbb){
                        for(int l=0; l<buf.size(); l++){
@@ -253,7 +256,7 @@ int main(int argc, char **argv){
 
                     }
                 }
-               std::cout << std::endl;
+//               std::cout << std::endl;
                buf.clear();
              }
            }
