@@ -68,27 +68,34 @@ void data_analysis(std::vector<uint8_t> csum){
                 GZ = (float)(csum[11]*256+csum[12]);
             }
             if( csum[13]*256+csum[14] > 32768 ){
-                WH1= (float)(csum[13]*256+csum[14]-65536)*6.28*5/8600;
+                WH1= (float)(csum[13]*256+csum[14]-65536)*6.28*20/352000;
             }else{
-                WH1= (float)(csum[13]*256+csum[14])*6.28*5/8600;
+                WH1= (float)(csum[13]*256+csum[14])*6.28*20/352000;
            }
             if( csum[15]*256+csum[16] > 32768 ){
-                WH2= (float)(csum[15]*256+csum[16]-65536)*6.28*5/8600;
+                WH2= (float)(csum[15]*256+csum[16]-65536)*6.28*20/352000;
             }else{
-                WH2= (float)(csum[15]*256+csum[16])*6.28*5/8600;
+                WH2= (float)(csum[15]*256+csum[16])*6.28*20/352000;
             }
             if( csum[17]*256+csum[18] > 32768 ){
-                WH3= (float)(csum[17]*256+csum[18]-65536)*6.28*5/8600;
+                WH3= (float)(csum[17]*256+csum[18]-65536)*6.28*20/352000;
             }else{
-                WH3= (float)(csum[17]*256+csum[18])*6.28*5/8600;
+                WH3= (float)(csum[17]*256+csum[18])*6.28*20/352000;
             }
             if( csum[19]*256+csum[20] > 32768 ){
-                WH4= (float)(csum[19]*256+csum[20]-65536)*6.28*5/8600;
+                WH4= (float)(csum[19]*256+csum[20]-65536)*6.28*20/352000;
             }else{
-                WH4= (float)(csum[19]*256+csum[20])*6.28*5/8600;
+                WH4= (float)(csum[19]*256+csum[20])*6.28*20/352000;
             }
-
-            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
+            WH1 = WH1 * 1.05;
+            WH2 = WH2 * 1.05;
+            WH3 = WH3 * 1.05;
+            WH4 = WH4 * 1.05;
+//            if(fabs(WH1)<0.3) {WH1 = 0;}
+//            if(fabs(WH2)<0.3) {WH2 = 0;}
+//            if(fabs(WH3)<0.3) {WH3 = 0;}
+//            if(fabs(WH4)<0.3) {WH4 = 0;}
+//            std::cout << WH1  <<  "    "<< WH2  <<  "    "<< WH3  <<  "    "<< WH4  <<  std::endl;
 
 
 
@@ -216,7 +223,7 @@ int main(int argc, char **argv){
     uart_sub = nh.subscribe<geometry_msgs::Twist>("/cmd_vel", 1000,cmd_vel_CB);
     try
         {
-            ser.setPort("/dev/arduino");
+            ser.setPort("/dev/ttyACM0");
             ser.setBaudrate(115200);
             serial::Timeout to = serial::Timeout::simpleTimeout(1000);
             ser.setTimeout(to);
